@@ -10,16 +10,20 @@ class FilmController extends Controller
 {
     public function index() {
         $films_count = Film::count('films');
-        $total_pages = Film::getTotalPages($films_count);
-        if ($total_pages < $this->page) {
-            static::redirectTo(View::linkToPage($total_pages));
-        }elseif($this->page < 1){
-            static::redirectTo(View::linkToPage(1));
+        if ($films_count > 0) {
+            $total_pages = Film::getTotalPages($films_count);
+            if ($total_pages < $this->page) {
+                static::redirectTo(View::linkToPage($total_pages));
+            }elseif($this->page < 1){
+                static::redirectTo(View::linkToPage(1));
+            }
+            $films = Film::loadFilms('', [], 'name', $this->page);
+            $view = new View('film/index', ['films' => $films]);
+            if ($films_count > PAGINATION_PARAMS['films']['per_page'])
+                $view->makePagination($films_count, $this->page, 'films');
+        }else{
+            $view = new View('film/zero_result');
         }
-        $films = Film::loadFilms('', [], 'name', $this->page);
-        $view = new View('film/index', ['films' => $films]);
-        if ($films_count > PAGINATION_PARAMS['films']['per_page'])
-            $view->makePagination($films_count, $this->page, 'films');
         $view->render();
     }
 
