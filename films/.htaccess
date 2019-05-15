@@ -1,0 +1,8 @@
+# Включаем mod_rewrite
+RewriteEngine on
+
+DirectoryIndex index.php
+
+RewriteCond %{REQUEST_FILENAME} !-s
+
+RewriteRule ^(.+)$ /index.php?$1 [L]
