@@ -13,10 +13,10 @@ spl_autoload_register(function ($class) {
         return;
     }
 
-    $relative_class = substr($class, $len);
+    $relative_class = lcfirst(substr($class, $len));
 
     $file = $base_dir . str_replace('\\', '/', $relative_class) . '.php';
-
+    echo $file;die;
     if (file_exists($file)) {
         require $file;
     }
