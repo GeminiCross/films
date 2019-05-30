@@ -30,10 +30,4 @@
             </div>
         </div>
     </form>
-    <p><h3>Вы можете получить файл примера</h3></p>
-    <form action="film-getExampleFile" method="get">
-        <p><label for="number">Укажите количество фильмов, которое вы хотите добавить</label></p>
-        <p><input type="text" class="form-control col-3" pattern="[0-9]+" name="q" id="number"></p>
-        <p><input type="submit" class="form-control col-3" value="Скачать"></p>
-    </form>
 </div>

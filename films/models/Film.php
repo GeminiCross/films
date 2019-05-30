@@ -60,62 +60,45 @@ class Film extends Model
     ->message - сообщение об ошибках и колличестве валидированных фильмов
     */
 
-    public static function validateJson($file) {
-        $lines = file($file);
+    public static function validateFile($file) {
+        $films_string = preg_split('/\\n\\n/', file_get_contents($file), -1, PREG_SPLIT_NO_EMPTY);   //разбивает весь текст файла по 1 фильму
+        $films_array = [];
         $validation['message'] = '';
-        foreach ($lines as $line => $string) {                                                      //удаляет строки комментариев
-            if (mb_strpos($string, '#') == 1 || substr($string, 0, 1) == '#') {
-                unset($lines[$line]);
-            }
-        }
-        $validation['films'] = preg_split('/[0-9]+->/', implode($lines));   //разбивает весь текст файла по 1 фильму
-        unset($validation['films'][0]);
-        $total_count = count($validation['films']);
-        foreach ($validation['films'] as $num => $film_from_file) { //декодирует json данные
-            $validation['films'][$num] = json_decode($film_from_file);
-            if(is_null($validation['films'][$num])){    //если json_decode вернул null, то записывает номер фильма для последующего вывода
-                $validation['message'] .= 'Синтаксическая ошибка в фильме под номером ' . $num . '.<br>';//информации об синтаксической ошибке
-                unset($validation['films'][$num]);  //и удаляет фильм
-            }
-        }
-        $existing_names = static::getExistingNames();
-        $existing_formats = static::getAllFormats();
+        $tolower = function ($item) {
+            return mb_strtolower($item);
+        };
+        $existing_names = array_map($tolower, static::getExistingNames());
+        $existing_formats = array_map($tolower, static::getAllFormats());
         $registred_names = [];
-        $unset = [];
-        foreach ($validation['films'] as $num => $film) {
-            if(!property_exists($film, 'name') || $film->name == '') { //проверяет, задано ли имя у фильма
-                $validation['message'] .= 'Неверно указано имя у фильма под номером ' . $num . '.<br>';
-                $unset[] = $num;
+        foreach ($films_string as $key => $film_string) {
+            $film = [];
+            preg_match('/Title: (.+)\\nRelease Year: (.+)\\nFormat: (.+)\\nStars: (.+)/', $film_string,$film);
+            unset($film[0]);
+            if(count($film) < 4) { //удаляет фильм, если заданы не все поля
+                $validation['message'] .= 'Синтаксическая ошибка в фильме под номером ' . $key . '<br>';
                 continue;
             }
-            if(in_array($film->name, $existing_names)) {
-                $validation['message'] .= 'Имя ' . $film->name . ' уже занято.<br>';
-                $unset[] = $num;
+            if(in_array(mb_strtolower($film[1]), $existing_names)) { // проверяет, нет ли такого фильма в базе данных
+                $validation['message'] .= 'Имя ' . $film[1] . ' уже занято.<br>';
                 continue;
             }
-            $registred_name_num = array_search($film->name, $registred_names);
-            if($registred_name_num) { //проверяет, дублируются ли имена у фильмов в json. Если да, удаляет все одинаковые
-                $validation['message'] .= 'В вашем файле дублируется имя ' . $film->name . '.<br>';
-                $unset[] = $num;
-                $unset[] = $registred_name_num;
+            if(isset($registred_names[mb_strtolower($film[1])])) { //проверяет, дублируются ли имена у фильмов в файле. Если да, удаляет все одинаковые -1
+                $validation['message'] .= 'В вашем файле дублируется имя ' . $film[1] . '.<br>';
+                unset($validation['films'][$registred_names[$film[1]]]);
                 continue;
             }
-            if(!property_exists($film, 'year') || !is_numeric($film->year)) { //проверяет, корректно ли указан год выхода фильма
-                $validation['message'] .= 'У фильма под номером ' . $num . ' год выхода указан некорректно.<br>';
-                $unset[] = $num;
+            if(strlen(trim($film[2])) !== 4 || !is_numeric(trim($film[2]))){ // валидация года выхода
+                $validation['message'] .= 'У фильма под номером ' . $key . ' год выхода указан некорректно.<br>';
                 continue;
             }
-            if(!property_exists($film, 'format') || !in_array($film->format, $existing_formats)) { //валидирует форматы
-                $validation['message'] .= 'Некорректный формат у фильма под номером ' . $num . '.<br>';
-                $unset[] = $num;
+            if(!in_array(mb_strtolower($film[3]), $existing_formats)) { // валидация формата
+                $validation['message'] .= 'Некорректный формат у фильма под номером ' . $key . '.<br>';
                 continue;
             }
-            $registred_names[$num] = $film->name;
+            $registred_names[mb_strtolower($film[1])] = $key;
+            $validation['films'][$key] = (object)['name' => trim($film[1]), 'year' => trim($film[2]), 'format' => trim($film[3]), 'actor_list' => preg_split('/, /', $film[4], -1, PREG_SPLIT_NO_EMPTY)];
         }
-        foreach ($unset as $num){ //удаляет из массива невалидированные фильмы
-            unset($validation['films'][$num]);
-        }
-        $validation['message'] .= 'Сохранено ' . count($validation['films']) . ' фильмов из ' . $total_count . ' загруженных';
+        $validation['message'] .= 'Сохранено ' . count($validation['films']) . ' фильмов.';
         return (object)$validation;
     }
 
@@ -188,10 +171,10 @@ class Film extends Model
 
     /*принимает json файл, запускает валидацию и сохраняет валидированные фильмы в базу данных*/
 
-    public static function saveFilmsFromJson($films) {
+    public static function saveFilmsFromFile($films) {
         $films_file = $films['tmp_name'];
         if(file_exists($films_file) && is_uploaded_file($films_file)) {
-            $validation = Film::validateJson($films_file);
+            $validation = Film::validateFile($films_file);
             $result['message'] = $validation->message;
             $result['success'] = true;
             foreach ($validation->films as $film) {
@@ -314,16 +297,12 @@ class Film extends Model
             WHERE actors.actor_name LIKE :actor_name';
         $statement = Db::getConnect()->prepare($query);
         $statement->execute([':actor_name' => '%' . $actor_name . '%']);
-//        $statement->debugDumpParams();die;
         return $statement->fetch()[0];
     }
 
     public static function delete($id) {
         $deleted_actors_links = static::deleteActorsLinks($id);
-        var_dump($deleted_actors_links);
-//        static::deleteActors();
         $deleted_film = static::deleteById($id);
-        var_dump(($deleted_film));
         return $deleted_actors_links && $deleted_film;
     }
 }
